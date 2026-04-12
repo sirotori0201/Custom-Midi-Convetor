@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDI → JSON</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.0/build/Midi.min.js"></script>
+
+<style>
+body {
+    margin: 0;
+    font-family: system-ui, Arial;
+    background: #0b0d10;
+    color: #e6e6e6;
+}
+
+.container {
+    max-width: 800px;
+    margin: auto;
+    padding: 20px;
+}
+
+h1 {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 20px;
+}
+
+.row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+input[type="text"] {
+    border: none;
+    border-bottom: 1px solid #333;
+    padding: 6px;
+    outline: none;
+    font-size: 14px;
+    background: transparent;
+    color: #e6e6e6;
+}
+
+/* TRACK */
+.track {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #1c2230;
+}
+
+.track small {
+    color: #777;
+}
+
+.track-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.track-options {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* SLIDER (no knob) */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 130px;
+    height: 6px;
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+
+    background: linear-gradient(
+        to right,
+        #7aa2ff var(--value, 50%),
+        #1a2130 var(--value, 50%)
+    );
+
+    border-radius: 999px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+/* DISABLED SLIDER */
+input[type="range"]:disabled {
+    opacity: 0.35;
+    filter: grayscale(1);
+    cursor: not-allowed;
+}
+
+/* TOGGLE */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 38px;
+    height: 20px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider-toggle {
+    position: absolute;
+    inset: 0;
+    background: #1f2633;
+    border: 1px solid #2a2f3a;
+    border-radius: 999px;
+}
+
+.slider-toggle:before {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 3px;
+    top: 2px;
+    background: #888;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+
+.switch input:checked + .slider-toggle {
+    background: #22314a;
+    border-color: #7aa2ff;
+}
+
+.switch input:checked + .slider-toggle:before {
+    transform: translateX(18px);
+    background: #7aa2ff;
+}
+
+.value-badge {
+    font-size: 12px;
+    color: #aaa;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* upload */
+.upload-btn {
+    display: inline-block;
+    cursor: pointer;
+}
+
+.upload-btn input { display: none; }
+
+.upload-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: #0c101a;
+    border: 1px solid #1f2633;
+}
+
+/* copy */
+#copyBtn {
+    border: 1px solid #1f2633;
+    background: #0c101a;
+    color: #e6e6e6;
+    padding: 8px 14px;
+    font-size: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+/* output */
+textarea {
+    width: 100%;
+    height: 240px;
+    border: 1px solid #1f2633;
+    background: #0a0c10;
+    color: #9ef0ff;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    outline: none;
+}
+
+.info {
+    font-size: 12px;
+    color: #888;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🎵 MIDI → ARRAY</h1>
+
+<div class="row">
+
+    <label class="upload-btn">
+        <input type="file" id="fileInput" accept=".mid,.midi">
+        <div class="upload-inner">🎵 Upload MIDI</div>
+    </label>
+
+    <input type="text" id="midiNameInput" placeholder="name">
+
+    <div>
+        <span style="font-size:12px;color:#aaa;">precision</span>
+        <input type="range" id="timePrecision" min="0" max="5" value="2">
+        <span id="precisionValue">2</span>
+    </div>
+
+</div>
+
+<div class="row">
+    <div class="info" id="totalNotesInfo">Total notes: 0</div>
+</div>
+
+<div id="trackControls"></div>
+
+<div class="row" style="justify-content:space-between;margin-top:10px;">
+    <span style="font-size:12px;color:#888;">output</span>
+    <button id="copyBtn" onclick="copyToClipboard()">copy</button>
+</div>
+
+<textarea id="jsonOutput" readonly></textarea>
+
+</div>
+
+<script>
+
+let tracksData = [];
+
+const midiNameInput = document.getElementById('midiNameInput');
+const precisionSlider = document.getElementById('timePrecision');
+const totalNotesInfo = document.getElementById('totalNotesInfo');
+
+function setSliderFill(slider) {
+    const percent = (slider.value / slider.max) * 100;
+    slider.style.setProperty("--value", percent + "%");
+}
+
+/* LOAD MIDI */
+document.getElementById('fileInput').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const midi = new Midi(ev.target.result);
+
+        midiNameInput.value = "";
+
+        tracksData = midi.tracks.map((t, i) => ({
+            name: t.name || `Track ${i+1}`,
+            trackNotes: t.notes,
+
+            // ✅ ONLY FIRST 5 ENABLED BY DEFAULT
+            include: i < 5,
+
+            mergeIndex: Math.min(i, 4)
+        }));
+
+        render();
+        update();
+    };
+
+    reader.readAsArrayBuffer(file);
+});
+
+midiNameInput.addEventListener('input', update);
+
+/* PRECISION */
+precisionSlider.addEventListener('input', e => {
+    document.getElementById('precisionValue').textContent = e.target.value;
+    setSliderFill(precisionSlider);
+    update();
+});
+
+setSliderFill(precisionSlider);
+
+/* RENDER */
+function render() {
+    const el = document.getElementById('trackControls');
+    el.innerHTML = '';
+
+    tracksData.forEach((t) => {
+
+        const row = document.createElement('div');
+        row.className = 'track';
+
+        const left = document.createElement('div');
+        left.className = "track-left";
+        left.innerHTML = `
+            <div>${t.name}</div>
+            <small>${t.trackNotes.length} notes</small>
+        `;
+
+        const right = document.createElement('div');
+        right.className = "track-options";
+
+        const label = document.createElement('label');
+        label.className = "switch";
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = t.include;
+
+        const sliderToggle = document.createElement('span');
+        sliderToggle.className = "slider-toggle";
+
+        label.appendChild(cb);
+        label.appendChild(sliderToggle);
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = 0;
+        slider.max = 4;
+        slider.value = t.mergeIndex;
+
+        setSliderFill(slider);
+
+        const val = document.createElement('span');
+        val.className = "value-badge";
+        val.textContent = t.mergeIndex;
+
+        function syncDisabled() {
+            slider.disabled = !t.include;
+        }
+
+        cb.onchange = () => {
+            t.include = cb.checked;
+            syncDisabled();
+            update();
+        };
+
+        slider.oninput = () => {
+            t.mergeIndex = +slider.value;
+            val.textContent = t.mergeIndex;
+            setSliderFill(slider);
+            update();
+        };
+
+        syncDisabled();
+
+        right.appendChild(label);
+        right.appendChild(slider);
+        right.appendChild(val);
+
+        row.appendChild(left);
+        row.appendChild(right);
+
+        el.appendChild(row);
+    });
+}
+
+/* UPDATE */
+function update() {
+    const precision = +precisionSlider.value;
+    const name = midiNameInput.value || "midi name";
+
+    const out = [];
+    let totalNotes = 0;
+
+    out.push([
+        name,
+        0.5,0.5,0.5,0.5,0.5,
+        1,1,1,1,1
+    ]);
+
+    tracksData.forEach(t => {
+        if (!t.include) return;
+
+        t.trackNotes.forEach(n => {
+            out.push([
+                round(n.time, precision),
+                n.midi + 128 * t.mergeIndex
+            ]);
+            totalNotes++;
+        });
+    });
+
+    totalNotesInfo.textContent = `Total notes: ${totalNotes}`;
+
+    out.sort((a,b)=>a[0]-b[0]);
+
+    document.getElementById('jsonOutput').value =
+        JSON.stringify(out);
+}
+
+function round(n,p){
+    const f = Math.pow(10,p);
+    return Math.round(n*f)/f;
+}
+
+/* COPY */
+function copyToClipboard(){
+    const el = document.getElementById('jsonOutput');
+    el.select();
+    document.execCommand('copy');
+
+    const btn = document.getElementById('copyBtn');
+    const old = btn.textContent;
+
+    btn.textContent = "copied ✓";
+
+    setTimeout(() => {
+        btn.textContent = old;
+    }, 1200);
+}
+
+</script>
+
+</body>
+</html>
