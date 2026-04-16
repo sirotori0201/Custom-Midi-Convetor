@@ -45,7 +45,6 @@ input[type="text"] {
     color: #e6e6e6;
 }
 
-/* TRACK */
 .track {
     display: flex;
     justify-content: space-between;
@@ -70,7 +69,6 @@ input[type="text"] {
     gap: 12px;
 }
 
-/* SLIDER (no knob) */
 input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
@@ -95,14 +93,12 @@ input[type="range"]::-webkit-slider-thumb {
     opacity: 0;
 }
 
-/* DISABLED SLIDER */
 input[type="range"]:disabled {
     opacity: 0.35;
     filter: grayscale(1);
     cursor: not-allowed;
 }
 
-/* TOGGLE */
 .switch {
     position: relative;
     display: inline-block;
@@ -153,7 +149,6 @@ input[type="range"]:disabled {
     text-align: center;
 }
 
-/* upload */
 .upload-btn {
     display: inline-block;
     cursor: pointer;
@@ -171,7 +166,6 @@ input[type="range"]:disabled {
     border: 1px solid #1f2633;
 }
 
-/* copy */
 #copyBtn {
     border: 1px solid #1f2633;
     background: #0c101a;
@@ -182,7 +176,6 @@ input[type="range"]:disabled {
     cursor: pointer;
 }
 
-/* output */
 textarea {
     width: 100%;
     height: 240px;
@@ -253,7 +246,6 @@ function setSliderFill(slider) {
     slider.style.setProperty("--value", percent + "%");
 }
 
-/* LOAD MIDI */
 document.getElementById('fileInput').addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -268,10 +260,10 @@ document.getElementById('fileInput').addEventListener('change', e => {
             name: t.name || `Track ${i+1}`,
             trackNotes: t.notes,
 
-            // ✅ ONLY FIRST 5 ENABLED BY DEFAULT
-            include: i < 5,
+            include: i < 8,
 
-            mergeIndex: Math.min(i, 4)
+            // UPDATED → clamp to 7
+            mergeIndex: Math.min(i, 7)
         }));
 
         render();
@@ -283,7 +275,6 @@ document.getElementById('fileInput').addEventListener('change', e => {
 
 midiNameInput.addEventListener('input', update);
 
-/* PRECISION */
 precisionSlider.addEventListener('input', e => {
     document.getElementById('precisionValue').textContent = e.target.value;
     setSliderFill(precisionSlider);
@@ -292,7 +283,6 @@ precisionSlider.addEventListener('input', e => {
 
 setSliderFill(precisionSlider);
 
-/* RENDER */
 function render() {
     const el = document.getElementById('trackControls');
     el.innerHTML = '';
@@ -328,7 +318,7 @@ function render() {
         const slider = document.createElement('input');
         slider.type = 'range';
         slider.min = 0;
-        slider.max = 4;
+        slider.max = 7; // UPDATED
         slider.value = t.mergeIndex;
 
         setSliderFill(slider);
@@ -367,7 +357,6 @@ function render() {
     });
 }
 
-/* UPDATE */
 function update() {
     const precision = +precisionSlider.value;
     const name = midiNameInput.value || "midi name";
@@ -375,10 +364,11 @@ function update() {
     const out = [];
     let totalNotes = 0;
 
+    // UPDATED → 8 slots
     out.push([
         name,
-        0.5,0.5,0.5,0.5,0.5,
-        1,1,1,1,1
+        0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,
+        1,1,1,1,1,1,1,1
     ]);
 
     tracksData.forEach(t => {
@@ -406,7 +396,6 @@ function round(n,p){
     return Math.round(n*f)/f;
 }
 
-/* COPY */
 function copyToClipboard(){
     const el = document.getElementById('jsonOutput');
     el.select();
